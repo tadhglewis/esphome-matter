@@ -4,8 +4,16 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 import esphome.final_validate as fv
 from esphome.components.esp32 import (
+    VARIANT_ESP32C5,
+    VARIANT_ESP32C6,
+    VARIANT_ESP32C61,
+    VARIANT_ESP32H2,
+    VARIANT_ESP32H4,
+    VARIANT_ESP32H21,
+    VARIANT_ESP32S31,
     add_idf_component,
     add_idf_sdkconfig_option,
+    get_esp32_variant,
     require_vfs_select,
 )
 from esphome.const import (
@@ -282,11 +290,34 @@ async def to_code(config: ConfigType):
         # commissioned as matter-over-thread or matter-over-wifi device depending on the hardware capabilities of the
         # device. If the device supports both, it can be commissioned in either mode.
 
-        # TODO: only enable if device supports it
-        add_idf_sdkconfig_option("CONFIG_OPENTHREAD_ENABLED", True)
-        add_idf_sdkconfig_option("CONFIG_OPENTHREAD_CLI", False)
-        add_idf_sdkconfig_option("CONFIG_OPENTHREAD_CONSOLE_ENABLE", False)
-        add_idf_sdkconfig_option("CONFIG_OPENTHREAD_SRP_CLIENT", True)
+        # Thread can only commission on an SoC that has an IEEE 802.15.4 radio.
+        # This is the set of ESP32 variants whose SOC_IEEE802154_SUPPORTED cap is
+        # set in ESP-IDF 5.5. It is *native* radio support: ESPHome's openthread
+        # component also runs against an external RCP on other variants, but that
+        # is not usable for commissioning here - the radio has to be on-die.
+        #
+        # Deliberately not a "has Thread support" check against the openthread
+        # component's own variant list: that list includes RCP-capable variants
+        # (C2/C3/S2/S3) which have no 802.15.4 radio at all.
+        thread_capable = get_esp32_variant() in (
+            VARIANT_ESP32C5,
+            VARIANT_ESP32C6,
+            VARIANT_ESP32C61,
+            VARIANT_ESP32H2,
+            VARIANT_ESP32H4,
+            VARIANT_ESP32H21,
+            VARIANT_ESP32S31,
+        )
+        add_idf_sdkconfig_option("CONFIG_ENABLE_MATTER_OVER_THREAD", thread_capable)
+        if thread_capable:
+            add_idf_sdkconfig_option("CONFIG_OPENTHREAD_ENABLED", True)
+            add_idf_sdkconfig_option("CONFIG_OPENTHREAD_CLI", False)
+            add_idf_sdkconfig_option("CONFIG_OPENTHREAD_CONSOLE_ENABLE", False)
+            add_idf_sdkconfig_option("CONFIG_OPENTHREAD_SRP_CLIENT", True)
+        else:
+            # esp_matter's Kconfig enables OpenThread by default; turn it off so
+            # the Thread stack is not built for a radio that does not exist.
+            add_idf_sdkconfig_option("CONFIG_ESP_MATTER_ENABLE_OPENTHREAD", False)
 
         # TODO: use CORE.data?
         add_idf_sdkconfig_option("CONFIG_BT_ENABLED", True)
