@@ -186,6 +186,30 @@ async def _set_executable_component_name():
         cg.add_platformio_option(key, value)
 
 
+def _thread_capable() -> bool:
+    """Whether ESPHome's openthread component accepts this target.
+
+    The set of variants with a native IEEE 802.15.4 radio lives inside ESPHome's
+    openthread config validator and is not exported, so ask the validator itself
+    rather than duplicating the list here. An empty config has no
+    ``border_router:`` key, which makes it take the plain-device path and raise
+    for variants with no native radio.
+    """
+    try:
+        from esphome.components.openthread import _validate_platform
+    except ImportError:
+        return False
+    try:
+        _validate_platform({})
+    except cv.Invalid:
+        return False
+    except Exception:
+        # Framework-version and other checks share this validator; anything that
+        # is not a capability verdict should not silently disable Thread.
+        return True
+    return True
+
+
 @coroutine_with_priority(CoroPriority.NETWORK_SERVICES)
 async def to_code(config: ConfigType):
     var = cg.new_Pvariable(config[CONF_ID])
@@ -282,11 +306,22 @@ async def to_code(config: ConfigType):
         # commissioned as matter-over-thread or matter-over-wifi device depending on the hardware capabilities of the
         # device. If the device supports both, it can be commissioned in either mode.
 
-        # TODO: only enable if device supports it
-        add_idf_sdkconfig_option("CONFIG_OPENTHREAD_ENABLED", True)
-        add_idf_sdkconfig_option("CONFIG_OPENTHREAD_CLI", False)
-        add_idf_sdkconfig_option("CONFIG_OPENTHREAD_CONSOLE_ENABLE", False)
-        add_idf_sdkconfig_option("CONFIG_OPENTHREAD_SRP_CLIENT", True)
+        # Thread can only commission on an SoC with an IEEE 802.15.4 radio. With
+        # no radio the Thread stack can never be used and only costs RAM.
+        if _thread_capable():
+            # The device can be commissioned as matter-over-thread as well as
+            # matter-over-wifi.
+            add_idf_sdkconfig_option("CONFIG_ENABLE_MATTER_OVER_THREAD", True)
+            add_idf_sdkconfig_option("CONFIG_OPENTHREAD_ENABLED", True)
+            add_idf_sdkconfig_option("CONFIG_OPENTHREAD_CLI", False)
+            add_idf_sdkconfig_option("CONFIG_OPENTHREAD_CONSOLE_ENABLE", False)
+            add_idf_sdkconfig_option("CONFIG_OPENTHREAD_SRP_CLIENT", True)
+        else:
+            # Thread defaults to on at two layers - connectedhomeip and esp_matter
+            # - so both have to be disabled or a Thread stack is built for a radio
+            # that does not exist.
+            add_idf_sdkconfig_option("CONFIG_ENABLE_MATTER_OVER_THREAD", False)
+            add_idf_sdkconfig_option("CONFIG_ESP_MATTER_ENABLE_OPENTHREAD", False)
 
         # TODO: use CORE.data?
         add_idf_sdkconfig_option("CONFIG_BT_ENABLED", True)
