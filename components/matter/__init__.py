@@ -313,15 +313,19 @@ async def to_code(config: ConfigType):
         # probe that validator rather than duplicating the list here - when
         # ESPHome's list changes this follows it automatically.
         thread_capable = _thread_capable()
-        add_idf_sdkconfig_option("CONFIG_ENABLE_MATTER_OVER_THREAD", thread_capable)
         if thread_capable:
+            # The SoC has a native 802.15.4 radio, so the device can be
+            # commissioned as matter-over-thread as well as matter-over-wifi.
+            add_idf_sdkconfig_option("CONFIG_ENABLE_MATTER_OVER_THREAD", True)
             add_idf_sdkconfig_option("CONFIG_OPENTHREAD_ENABLED", True)
             add_idf_sdkconfig_option("CONFIG_OPENTHREAD_CLI", False)
             add_idf_sdkconfig_option("CONFIG_OPENTHREAD_CONSOLE_ENABLE", False)
             add_idf_sdkconfig_option("CONFIG_OPENTHREAD_SRP_CLIENT", True)
         else:
-            # esp_matter's Kconfig enables OpenThread by default; turn it off so
-            # the Thread stack is not built for a radio that does not exist.
+            # No 802.15.4 radio. Thread defaults to on at two layers - in
+            # connectedhomeip and in esp_matter - so both must be disabled or a
+            # Thread stack is built for a radio that does not exist.
+            add_idf_sdkconfig_option("CONFIG_ENABLE_MATTER_OVER_THREAD", False)
             add_idf_sdkconfig_option("CONFIG_ESP_MATTER_ENABLE_OPENTHREAD", False)
 
         # TODO: use CORE.data?
