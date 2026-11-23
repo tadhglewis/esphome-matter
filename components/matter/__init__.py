@@ -41,6 +41,13 @@ AUTO_LOAD = ["network"]
 MIN_ESPHOME_THREAD_VERSION = "2026.6.0"
 MIN_ESPHOME_IDF_TOOLCHAIN_VERSION = "2026.9.0"
 ESP_MATTER_VERSION = "1.6.0~2"
+_NETWORK_COMMISSIONING_INIT_SYMBOL = (
+    "_Z54ESPMatterNetworkCommissioningClusterServerInitCallbackt"
+)
+_NETWORK_COMMISSIONING_SHUTDOWN_SYMBOL = (
+    "_Z58ESPMatterNetworkCommissioningClusterServerShutdownCallbackt"
+    "N4chip3app19ClusterShutdownTypeE"
+)
 
 # Matter spec section 5.1.7.1: these passcodes are explicitly forbidden.
 _FORBIDDEN_PASSCODES = {
@@ -146,6 +153,7 @@ CONFIG_SCHEMA = cv.All(
                 cv.string_strict, cv.Length(min=0, max=64)
             ),
             # Endpoints
+            cv.Optional(CONF_BLE_COMMISSIONING, default=False): cv.boolean,
             cv.Optional(CONF_ENDPOINTS, default={}): cv.Schema(
                 {
                     cv.int_range(min=0, max=65534): ENDPOINT_SCHEMA,
@@ -165,6 +173,18 @@ def _final_validate(config: dict):
         cv.validate_esphome_version(MIN_ESPHOME_THREAD_VERSION)
     if CORE.using_toolchain_esp_idf:
         cv.validate_esphome_version(MIN_ESPHOME_IDF_TOOLCHAIN_VERSION)
+
+    if config[CONF_BLE_COMMISSIONING]:
+        if "wifi" not in full_config:
+            raise cv.Invalid(
+                "ble_commissioning hands the commissioned network to the wifi "
+                "component, so `wifi:` must be configured."
+            )
+        if "esp32_ble" in full_config:
+            raise cv.Invalid(
+                "ble_commissioning uses the NimBLE host and cannot be combined "
+                "with esp32_ble, which uses Bluedroid."
+            )
 
     network_config = full_config.get("network", {})
     if not network_config.get(CONF_ENABLE_IPV6, False):
@@ -282,8 +302,29 @@ async def to_code(config: ConfigType):
     # Has nothing to do with telemetry... But this is how connectedhomeip names the option that enables ethernet.
     add_idf_sdkconfig_option("CONFIG_ENABLE_ETHERNET_TELEMETRY", use_ethernet)
 
+    ble_commissioning = config[CONF_BLE_COMMISSIONING] and use_wifi
     # CONFIG_ENABLE_CHIPOBLE is enabled by default and must explicitly be disabled when not needed.
-    add_idf_sdkconfig_option("CONFIG_ENABLE_CHIPOBLE", not has_connectivity)
+    add_idf_sdkconfig_option(
+        "CONFIG_ENABLE_CHIPOBLE", ble_commissioning or not has_connectivity
+    )
+    if ble_commissioning:
+        from esphome.components import wifi
+        from esphome.components.esp32 import request_bluetooth
+
+        request_bluetooth()
+        wifi.request_wifi_scan_results()
+        wifi.request_wifi_scan_results_listener()
+        cg.add_define("USE_MATTER_BLE_COMMISSIONING")
+        cg.add_build_flag(f"-Wl,--wrap={_NETWORK_COMMISSIONING_INIT_SYMBOL}")
+        cg.add_build_flag(f"-Wl,--wrap={_NETWORK_COMMISSIONING_SHUTDOWN_SYMBOL}")
+        add_idf_sdkconfig_option("CONFIG_BT_ENABLED", True)
+        add_idf_sdkconfig_option("CONFIG_BT_BLUEDROID_ENABLED", False)
+        add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_ENABLED", True)
+        add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_ENABLE_CONN_REATTEMPT", False)
+        add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_MAX_CONNECTIONS", 1)
+        add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_ROLE_CENTRAL", False)
+        add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_ROLE_OBSERVER", False)
+        add_idf_sdkconfig_option("CONFIG_USE_BLE_ONLY_FOR_COMMISSIONING", True)
     if not has_connectivity:
         # If no network is configured, commissioning over the network isn't possible and esphome-matter must fall
         # back to BlueTooth (BLE) commissioning (the default for most matter devices). In this mode, the device can be

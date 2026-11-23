@@ -97,10 +97,6 @@ public:
         sensor, endpoint_id, cluster_id, attribute_id, converter,
         update_code_driven_sensor_attribute<ClusterT, ValueT, Setter>));
   }
-#endif // USE_SENSOR
-#ifdef USE_BINARY_SENSOR
-  void
-  register_binary_sensor_attribute(binary_sensor::BinarySensor *sensor,
   void register_sensor_attribute_with_updater(sensor::Sensor *sensor,
                                               uint16_t endpoint_id,
                                               uint32_t cluster_id,
@@ -110,6 +106,10 @@ public:
     this->mappings_.push_back(new MatterSensorAttributeMapping(
         sensor, endpoint_id, cluster_id, attribute_id, converter, updater));
   }
+#endif // USE_SENSOR
+#ifdef USE_BINARY_SENSOR
+  void
+  register_binary_sensor_attribute(binary_sensor::BinarySensor *sensor,
                                    uint16_t endpoint_id, uint32_t cluster_id,
                                    uint32_t attribute_id,
                                    BinarySensorValueConverter converter,
@@ -120,6 +120,20 @@ public:
   // Matter-thread callbacks to hop onto the main loop (defer is thread-safe).
   void defer_to_main_loop(std::function<void()> &&f) {
     this->defer(std::move(f));
+  }
+  void set_main_loop_interval(const char *name, uint32_t interval,
+                              std::function<void()> &&f) {
+    this->set_interval(name, interval, std::move(f));
+  }
+  void cancel_main_loop_interval(const char *name) {
+    this->cancel_interval(name);
+  }
+  void set_main_loop_timeout(const char *name, uint32_t timeout,
+                             std::function<void()> &&f) {
+    this->set_timeout(name, timeout, std::move(f));
+  }
+  void cancel_main_loop_timeout(const char *name) {
+    this->cancel_timeout(name);
   }
 
 private:

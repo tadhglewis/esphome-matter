@@ -2,6 +2,7 @@ CONF_MATTER = "matter"
 CONF_ENDPOINTS = "endpoints"
 CONF_DISCRIMINATOR = "discriminator"
 CONF_PASSCODE = "passcode"
+CONF_BLE_COMMISSIONING = "ble_commissioning"
 CONF_MANUAL_PAIRING_CODE = "manual_pairing_code"
 CONF_QR_CODE = "qr_code"
 CONF_COMPRESSED_FABRIC_ID = "compressed_fabric_id"
@@ -24,8 +25,8 @@ CONF_WITH_FEATURES = "with_features"
 CONF_MIN_LEVEL = "min_level"
 CONF_MAX_LEVEL = "max_level"
 CONF_ON_ATTRIBUTE = "on_attribute"
-
 CONF_FAN_ID = "fan_id"
+
 # Actions
 CONF_ENDPOINT_ID = "endpoint_id"
 CONF_CLUSTER_ID = "cluster_id"

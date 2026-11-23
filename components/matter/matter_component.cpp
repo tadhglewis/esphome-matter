@@ -8,6 +8,7 @@
 #include "esphome/core/application.h"
 #include "esphome/core/log.h"
 #include "matter_component.h"
+#include "matter_wifi_driver.h"
 
 #include <algorithm>
 #include <cinttypes>
@@ -330,6 +331,10 @@ void MatterComponent::setup() {
     }
   }
 
+#if defined(USE_WIFI) && defined(USE_MATTER_BLE_COMMISSIONING)
+  ESPHomeWiFiDriver::instance().setup_on_main_loop();
+#endif
+
   esp_matter::node::config_t node_config;
   esp_matter::node_t *node = esp_matter::node::create(
       &node_config, endpoint_attribute_update_cb, nullptr);
@@ -394,7 +399,14 @@ void MatterComponent::setup() {
 
 void MatterComponent::factory_reset() {
   ESP_LOGW(TAG, "Matter factory reset. Erasing fabric data and rebooting");
-  for (const char *ns : {"chip-config", "chip-counters", "CHIP_KVS"}) {
+  for (const char *ns : {
+           "chip-config",
+           "chip-counters",
+           "CHIP_KVS",
+#ifdef USE_MATTER_BLE_COMMISSIONING
+           "esphome",
+#endif
+       }) {
     nvs_handle_t h;
     if (nvs_open(ns, NVS_READWRITE, &h) == ESP_OK) {
       nvs_erase_all(h);
@@ -411,7 +423,11 @@ void MatterComponent::generate_commissioning_codes_() {
   payload.vendorID = CHIP_DEVICE_CONFIG_DEVICE_VENDOR_ID;
   payload.productID = CHIP_DEVICE_CONFIG_DEVICE_PRODUCT_ID;
   payload.commissioningFlow = chip::CommissioningFlow::kStandard;
-#if defined(USE_OPENTHREAD) || defined(USE_WIFI) || defined(USE_ETHERNET)
+#if defined(USE_MATTER_BLE_COMMISSIONING)
+  payload.rendezvousInformation.SetValue(chip::RendezvousInformationFlags(
+      chip::RendezvousInformationFlag::kBLE,
+      chip::RendezvousInformationFlag::kOnNetwork));
+#elif defined(USE_OPENTHREAD) || defined(USE_WIFI) || defined(USE_ETHERNET)
   payload.rendezvousInformation.SetValue(
       chip::RendezvousInformationFlag::kOnNetwork);
 #else

@@ -547,6 +547,7 @@ class Endpoint:
         config_var = f"{cluster.espm_namespace}_config"
         lines = [f"{cluster_ns}::config_t {config_var}{{}};"]
         feature_flags = []
+        direct_features = []
         features_by_name = {feature.name: feature for feature in cluster.features}
         cluster_config = self._cluster_configs[cluster.conf_key]
         for feature_name, enabled in cluster_config.enabled_features.items():
@@ -565,6 +566,7 @@ class Endpoint:
                 direct_features.append(feature)
         if feature_flags:
             lines.append(f"{config_var}.feature_flags = {' | '.join(feature_flags)};")
+        cluster_var = f"{cluster.espm_namespace}_created"
         lines.extend(
             (
                 f"auto *{cluster_var} = {cluster_ns}::create(endpoint, &{config_var}, esp_matter::CLUSTER_FLAG_SERVER);",
@@ -572,6 +574,13 @@ class Endpoint:
                 "  return false;",
             )
         )
+        for feature in sorted(direct_features, key=lambda f: f.bit):
+            lines.extend(
+                (
+                    f"if (esphome::matter::add_feature({cluster_var}, {cluster_ns}::feature::{feature.namespace}::add) != ESP_OK)",
+                    "  return false;",
+                )
+            )
         return lines
 
     def _make_build_callback(self) -> str:
@@ -601,7 +610,6 @@ class Endpoint:
                 if enabled
                 and feature_name in features_by_name
                 and (
-        direct_features = []
                     features_by_name[feature_name].conformance is None
                     or features_by_name[feature_name].conformance.choice is None
                 )
@@ -617,21 +625,14 @@ class Endpoint:
                 )
             )
             for feature in direct_features:
-        cluster_var = f"{cluster.espm_namespace}_created"
                 lines.extend(
                     (
                         f"if (esphome::matter::add_feature({cluster_var}, esp_matter::cluster::{cluster.espm_namespace}::feature::{feature.namespace}::add) != ESP_OK)",
                         "  return false;",
                     )
                 )
-        for feature in sorted(direct_features, key=lambda f: f.bit):
-            lines.extend(
-                (
-                    f"if (esphome::matter::add_feature({cluster_var}, {cluster_ns}::feature::{feature.namespace}::add) != ESP_OK)",
-                    "  return false;",
-                )
-            )
 
+        lines.extend(self._extra_build_lines)
         lines.extend(("return true;", "}"))
         return "\n".join(lines)
 
@@ -645,7 +646,6 @@ class EndpointRegistry:
         self._endpoints.append(endpoint)
         self._lookup[endpoint.endpoint_id] = endpoint
         self._lookup[endpoint.config[CONF_ID]] = endpoint
-        lines.extend(self._extra_build_lines)
 
     def lookup(self, endpoint_reference: int | ID) -> Endpoint:
         endpoint = self._lookup.get(endpoint_reference)
