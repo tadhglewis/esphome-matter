@@ -507,14 +507,18 @@ class Endpoint:
                 raise cv.Invalid(
                     f"Cluster '{cluster.name}' has no feature {feature_name}"
                 )
-            feature_flags.append(
-                f"{cluster_ns}::feature::{feature.namespace}::get_id()"
-            )
+            if feature.conformance is not None and feature.conformance.choice:
+                feature_flags.append(
+                    f"{cluster_ns}::feature::{feature.namespace}::get_id()"
+                )
+            else:
+                direct_features.append(feature)
         if feature_flags:
             lines.append(f"{config_var}.feature_flags = {' | '.join(feature_flags)};")
         lines.extend(
             (
-                f"if ({cluster_ns}::create(endpoint, &{config_var}, esp_matter::CLUSTER_FLAG_SERVER) == nullptr)",
+                f"auto *{cluster_var} = {cluster_ns}::create(endpoint, &{config_var}, esp_matter::CLUSTER_FLAG_SERVER);",
+                f"if ({cluster_var} == nullptr)",
                 "  return false;",
             )
         )
@@ -547,6 +551,7 @@ class Endpoint:
                 if enabled
                 and feature_name in features_by_name
                 and (
+        direct_features = []
                     features_by_name[feature_name].conformance is None
                     or features_by_name[feature_name].conformance.choice is None
                 )
@@ -562,12 +567,20 @@ class Endpoint:
                 )
             )
             for feature in direct_features:
+        cluster_var = f"{cluster.espm_namespace}_created"
                 lines.extend(
                     (
                         f"if (esphome::matter::add_feature({cluster_var}, esp_matter::cluster::{cluster.espm_namespace}::feature::{feature.namespace}::add) != ESP_OK)",
                         "  return false;",
                     )
                 )
+        for feature in sorted(direct_features, key=lambda f: f.bit):
+            lines.extend(
+                (
+                    f"if (esphome::matter::add_feature({cluster_var}, {cluster_ns}::feature::{feature.namespace}::add) != ESP_OK)",
+                    "  return false;",
+                )
+            )
 
         lines.extend(("return true;", "}"))
         return "\n".join(lines)

@@ -15,6 +15,9 @@ from .events import Event
 _LOGGER = logging.getLogger(__name__)
 
 
+_ESP_MATTER_FEATURE_NAMESPACES = {"auto": "fan_auto"}
+
+
 @dataclass(frozen=True, slots=True)
 class Feature:
     bit: int
@@ -35,7 +38,8 @@ class Feature:
     @property
     def namespace(self) -> str:
         """Feature name in esp_matter::cluster::<cluster>::feature::<feature> namespace."""
-        return snake_case(self.name)
+        namespace = snake_case(self.name)
+        return _ESP_MATTER_FEATURE_NAMESPACES.get(namespace, namespace)
 
     @property
     def conf_key(self):
