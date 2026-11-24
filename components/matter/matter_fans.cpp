@@ -88,7 +88,8 @@ bool configure_fan_control(esp_matter::endpoint_t *endpoint, fan::Fan *fan) {
   if (has_multi_speed) {
     esp_matter_attr_val_t value =
         esp_matter_uint8(std::max<uint8_t>(speed_count, 1));
-    if (esp_matter::attribute::set_val(speed_max, &value, false) != ESP_OK)
+    esp_err_t err = esp_matter::attribute::set_val(speed_max, &value, false);
+    if (err != ESP_OK && err != ESP_ERR_NOT_FINISHED)
       return false;
   }
 
@@ -109,7 +110,8 @@ bool configure_fan_control(esp_matter::endpoint_t *endpoint, fan::Fan *fan) {
     return false;
   esp_matter_attr_val_t value =
       esp_matter_enum8(static_cast<uint8_t>(sequence));
-  return esp_matter::attribute::set_val(attribute, &value, false) == ESP_OK;
+  esp_err_t err = esp_matter::attribute::set_val(attribute, &value, false);
+  return err == ESP_OK || err == ESP_ERR_NOT_FINISHED;
 }
 
 void MatterComponent::register_fan(fan::Fan *fan, uint16_t endpoint_id) {

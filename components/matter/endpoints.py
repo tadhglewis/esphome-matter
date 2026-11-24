@@ -566,6 +566,17 @@ class Endpoint:
                 direct_features.append(feature)
         if feature_flags:
             lines.append(f"{config_var}.feature_flags = {' | '.join(feature_flags)};")
+        if cluster.espm_namespace in _PARTICULATE_NAMESPACES and any(
+            "numeric_measurement" in flag for flag in feature_flags
+        ):
+            numeric = f"{config_var}.features.numeric_measurement"
+            lines.extend(
+                (
+                    f"{numeric}.measurement_unit = 4;",
+                    f"{numeric}.min_measured_value = nullable<float>(0.0f);",
+                    f"{numeric}.max_measured_value = nullable<float>(1000.0f);",
+                )
+            )
         cluster_var = f"{cluster.espm_namespace}_created"
         lines.extend(
             (
@@ -574,6 +585,14 @@ class Endpoint:
                 "  return false;",
             )
         )
+        if cluster.espm_namespace == "on_off":
+            lines.extend(
+                (
+                    f"if ({cluster_ns}::command::create_on({cluster_var}) == nullptr ||",
+                    f"    {cluster_ns}::command::create_toggle({cluster_var}) == nullptr)",
+                    "  return false;",
+                )
+            )
         for feature in sorted(direct_features, key=lambda f: f.bit):
             lines.extend(
                 (
@@ -635,6 +654,13 @@ class Endpoint:
         lines.extend(self._extra_build_lines)
         lines.extend(("return true;", "}"))
         return "\n".join(lines)
+
+
+_PARTICULATE_NAMESPACES = {
+    "pm1_concentration_measurement",
+    "pm25_concentration_measurement",
+    "pm10_concentration_measurement",
+}
 
 
 class EndpointRegistry:
