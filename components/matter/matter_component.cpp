@@ -340,14 +340,16 @@ void MatterComponent::setup() {
   // Always update device-name so it stays in sync if the ESPHome device name
   // changes. This is the DN TXT record in _matterc._udp — what controllers show
   // in their UI.
+#ifndef MATTER_FACTORY_PARTITION
   {
     nvs_handle_t h;
-    if (open_factory_namespace(NVS_READWRITE, &h) == ESP_OK) {
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
       nvs_set_str(h, "device-name", App.get_name().c_str());
       nvs_commit(h);
       nvs_close(h);
     }
   }
+#endif // MATTER_FACTORY_PARTITION
 
 #if defined(USE_WIFI) && defined(USE_MATTER_BLE_COMMISSIONING)
   ESPHomeWiFiDriver::instance().setup_on_main_loop();
